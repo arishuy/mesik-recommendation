@@ -59,9 +59,7 @@ def get_content_based_recommendations(song_id, top_n=5):
     return recommendations
 
 
-def hybrid_recommendations(input_song_name, num_recommendations=5):
-    # Get the song ID of the input song
-    input_song_id = data[data["title"] == input_song_name]["_id"].values[0]
+def hybrid_recommendations(input_song_id, num_recommendations=5):
 
     # Get content-based recommendations
     recommendations = get_content_based_recommendations(
@@ -78,12 +76,12 @@ def hybrid_recommendations(input_song_name, num_recommendations=5):
 
 @app.route("/recommend", methods=["GET"])
 def recommend_songs():
-    input_song_name = request.args.get("song_name")
+    input_song_id = request.args.get("song_id")
 
-    if not input_song_name:
-        return jsonify({"error": "Please provide a song_name parameter"}), 400
+    if not input_song_id:
+        return jsonify({"error": "Please provide a song_id parameter"}), 400
 
-    recommendations = hybrid_recommendations(input_song_name, num_recommendations=5)
+    recommendations = hybrid_recommendations(input_song_id, num_recommendations=5)
 
     # Convert recommendations to JSON format
     recommendations_json = recommendations[["_id", "title", "genre"]].to_dict(
@@ -96,6 +94,7 @@ def recommend_songs():
 @app.route("/refresh", methods=["GET"])
 def refresh():
     return jsonify({"message": "Refreshed"})
+
 
 if __name__ == "__main__":
     app.run(debug=True)
