@@ -93,5 +93,9 @@ def recommend_songs():
     return jsonify(recommendations_json)
 
 
+@app.route("/refresh", methods=["GET"])
+def refresh():
+    return jsonify({"message": "Refreshed"})
+
 if __name__ == "__main__":
     app.run(debug=True)
