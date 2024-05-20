@@ -1,16 +1,42 @@
+# -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify
 import pandas as pd
 import numpy as np
+import csv
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import CountVectorizer
+from utils import preprocess_lyrics, preprocess_input
+import json
+from pymongo import MongoClient
 
 app = Flask(__name__)
+# Mongo connection
+client = MongoClient(
+    "mongodb+srv://admin:dpuWbebzEpNQ4dOn@mesik.0td9pfj.mongodb.net/mesik?retryWrites=true&w=majority"
+)
+db = client["mesik"]
+collection = db["tokenizedlyrics"]
 
 # Load the data
 data = pd.read_csv("mesik.songs.csv")  # Replace with your filename
 
 # Drop rows with missing values (optional, adjust as needed)
 # data = data.dropna()
+
+
+def read_csv(file_path):
+    data = []
+    with open(file_path, "r", encoding="utf-8") as file:
+        csv_reader = csv.DictReader(file)
+        for row in csv_reader:
+            if not row["lyric"]:
+                continue
+            # clean lyrics
+            row["lyric"] = row["lyric"].replace("\n", " ")
+            # lowercase
+            row["lyric"] = row["lyric"].lower()
+            data.append({"Answer": row["title"], "Question": row["lyric"]})
+    return data
 
 
 # Function to get content-based recommendations based on music features
@@ -94,6 +120,59 @@ def recommend_songs():
 @app.route("/refresh", methods=["GET"])
 def refresh():
     return jsonify({"message": "Refreshed"})
+
+
+@app.route("/get-data", methods=["GET"])
+def get_data():
+    print("Loading data...")
+    item = collection.find_one()
+    print(item)
+    data = read_csv("mesik.songs.csv")
+    with open("data.json", "w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=4)
+    return jsonify({"message": "Data fetched"})
+
+
+@app.route("/add_lyrics", methods=["POST"])
+def add_lyrics():
+    data = request.get_json()
+    song_id = data["id"]
+    lyrics = data["lyric"]
+
+    processed_lyrics = preprocess_lyrics(lyrics)
+    return jsonify({"processed_lyrics": processed_lyrics})
+
+
+@app.route("/search", methods=["GET"])
+def search():
+    query = request.args.get("query")
+    processed_query = preprocess_input(query)
+    processed_query_str = " ".join(processed_query)
+
+    results_cursor = collection.find()
+    results = list(results_cursor)
+    corpus = [song["lyric"] for song in results]
+    corpus.append(processed_query_str)
+
+    vectorizer = CountVectorizer().fit_transform(corpus)
+    vectors = vectorizer.toarray()
+
+    query_vector = vectors[-1]
+    song_vectors = vectors[:-1]
+
+    similarities = cosine_similarity([query_vector], song_vectors).flatten()
+
+    matches = []
+    for idx, similarity in enumerate(similarities):
+        if similarity > 0.2:
+            matches.append(
+                {"song_id": str(results[idx]["song"]), "similarity": similarity}
+            )
+    # Sort matches by similarity score in descending order
+    matches = sorted(matches, key=lambda x: x["similarity"], reverse=True)
+    if len(matches) == 0:
+        return jsonify({"message": "No matches found"}), 404
+    return jsonify(matches[0]), 200
 
 
 if __name__ == "__main__":
