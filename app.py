@@ -8,12 +8,14 @@ from sklearn.feature_extraction.text import CountVectorizer
 from utils import preprocess_lyrics, preprocess_input
 import json
 from pymongo import MongoClient
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 # Mongo connection
-client = MongoClient(
-    "mongodb+srv://admin:dpuWbebzEpNQ4dOn@mesik.0td9pfj.mongodb.net/mesik?retryWrites=true&w=majority"
-)
+client = MongoClient(os.getenv("MONGODB_CONNECTION"))
 db = client["mesik"]
 collection = db["tokenizedlyrics"]
 
