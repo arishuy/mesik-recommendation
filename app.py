@@ -18,34 +18,32 @@ app = Flask(__name__)
 client = MongoClient(os.getenv("MONGODB_CONNECTION"))
 db = client["mesik"]
 collection = db["tokenizedlyrics"]
+collection_songs = db["songs"]
 
 # Load the data
-data = pd.read_csv("mesik.songs.csv")  # Replace with your filename
+
+
+def load_data_from_mongo():
+    cursor = collection_songs.find()
+    mongo_data = list(cursor)
+    df = pd.DataFrame(mongo_data)
+    df["_id"] = df["_id"].astype(str)
+    df["genre"] = df["genre"].astype(str)
+    df["artist"] = df["artist"].astype(str)
+    df["region"] = df["region"].astype(str)
+    df["release_date"] = pd.to_datetime(df["release_date"])
+    return df
+
 
 # Drop rows with missing values (optional, adjust as needed)
 # data = data.dropna()
 
 
-def read_csv(file_path):
-    data = []
-    with open(file_path, "r", encoding="utf-8") as file:
-        csv_reader = csv.DictReader(file)
-        for row in csv_reader:
-            if not row["lyric"]:
-                continue
-            # clean lyrics
-            row["lyric"] = row["lyric"].replace("\n", " ")
-            # lowercase
-            row["lyric"] = row["lyric"].lower()
-            data.append({"Answer": row["title"], "Question": row["lyric"]})
-    return data
-
-
 # Function to get content-based recommendations based on music features
 def get_content_based_recommendations(song_id, top_n=5):
-    # Get the features of the target song
+    data = load_data_from_mongo()
+    # Get the index of the target song
     target_song_index = data[data["_id"] == song_id].index[0]
-
     # Create a CountVectorizer object for genre
     count_genre = CountVectorizer()
     count_matrix_genre = count_genre.fit_transform(data["genre"])
@@ -122,17 +120,6 @@ def recommend_songs():
 @app.route("/refresh", methods=["GET"])
 def refresh():
     return jsonify({"message": "Refreshed"})
-
-
-@app.route("/get-data", methods=["GET"])
-def get_data():
-    print("Loading data...")
-    item = collection.find_one()
-    print(item)
-    data = read_csv("mesik.songs.csv")
-    with open("data.json", "w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=4)
-    return jsonify({"message": "Data fetched"})
 
 
 @app.route("/add_lyrics", methods=["POST"])
