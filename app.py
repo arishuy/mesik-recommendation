@@ -40,7 +40,7 @@ def load_data_from_mongo():
 
 
 # Function to get content-based recommendations based on music features
-def get_content_based_recommendations(song_id, top_n=5):
+def get_content_based_recommendations(song_id, top_n=10):
     data = load_data_from_mongo()
     # Get the index of the target song
     target_song_index = data[data["_id"] == song_id].index[0]
@@ -70,8 +70,8 @@ def get_content_based_recommendations(song_id, top_n=5):
 
     # Get the indices of the top N most similar songs
     combined_similarity = (
-        0.3 * genre_similarity
-        + 0.3 * artist_similarity
+        0.4 * genre_similarity
+        + 0.2 * artist_similarity
         + 0.2 * region_similarity
         + 0.2 * (target_year == data["release_date"].values[:, None])
     )
@@ -107,7 +107,7 @@ def recommend_songs():
     if not input_song_id:
         return jsonify({"error": "Please provide a song_id parameter"}), 400
 
-    recommendations = hybrid_recommendations(input_song_id, num_recommendations=5)
+    recommendations = hybrid_recommendations(input_song_id, num_recommendations=10)
 
     # Convert recommendations to JSON format
     recommendations_json = recommendations[["_id", "title", "genre"]].to_dict(
@@ -160,7 +160,7 @@ def search():
     # Sort matches by similarity score in descending order
     matches = sorted(matches, key=lambda x: x["similarity"], reverse=True)
     if len(matches) == 0:
-        return jsonify({"message": "No matches found"}), 404
+        return jsonify({"message": "No matches found"}), 200
     return jsonify(matches[0]), 200
 
 
