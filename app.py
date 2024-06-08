@@ -5,6 +5,8 @@ import numpy as np
 import csv
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import StandardScaler
 from utils import preprocess_lyrics, preprocess_input
 import json
 from pymongo import MongoClient
@@ -35,49 +37,46 @@ def load_data_from_mongo():
     return df
 
 
-# Drop rows with missing values (optional, adjust as needed)
-# data = data.dropna()
-
-
 # Function to get content-based recommendations based on music features
 def get_content_based_recommendations(song_id, top_n=10):
     data = load_data_from_mongo()
     # Get the index of the target song
     target_song_index = data[data["_id"] == song_id].index[0]
-    # Create a CountVectorizer object for genre
-    count_genre = CountVectorizer()
-    count_matrix_genre = count_genre.fit_transform(data["genre"])
 
-    # Compute the cosine similarity matrix based on genre
-    genre_similarity = cosine_similarity(count_matrix_genre)
+    # Create a TfidfVectorizer object for genre
+    tfidf_genre = TfidfVectorizer()
+    tfidf_matrix_genre = tfidf_genre.fit_transform(data["genre"])
+    genre_similarity = cosine_similarity(tfidf_matrix_genre)
 
-    # Create a CountVectorizer object for artist
-    count_artist = CountVectorizer()
-    count_matrix_artist = count_artist.fit_transform(data["artist"])
+    # Create a TfidfVectorizer object for artist
+    tfidf_artist = TfidfVectorizer()
+    tfidf_matrix_artist = tfidf_artist.fit_transform(data["artist"])
+    artist_similarity = cosine_similarity(tfidf_matrix_artist)
 
-    # Compute the cosine similarity matrix based on artist
-    artist_similarity = cosine_similarity(count_matrix_artist)
+    # Create a TfidfVectorizer object for region
+    tfidf_region = TfidfVectorizer()
+    tfidf_matrix_region = tfidf_region.fit_transform(data["region"])
+    region_similarity = cosine_similarity(tfidf_matrix_region)
 
-    # Create a CountVectorizer object for region
-    count_region = CountVectorizer()
-    count_matrix_region = count_region.fit_transform(data["region"])
+    # Scale the similarities
+    scaler = StandardScaler()
+    genre_similarity = scaler.fit_transform(genre_similarity)
+    artist_similarity = scaler.fit_transform(artist_similarity)
+    region_similarity = scaler.fit_transform(region_similarity)
 
-    # Compute the cosine similarity matrix based on region
-    region_similarity = cosine_similarity(count_matrix_region)
-
-    # Get the year of the target song
-    target_year = data.loc[target_song_index, "release_date"]
+    # Calculate the combined similarity
+    combined_similarity = (
+        0.5 * genre_similarity[target_song_index]
+        + 0.2 * artist_similarity[target_song_index]
+        + 0.2 * region_similarity[target_song_index]
+        + 0.1
+        * (
+            data["release_date"].values == data.loc[target_song_index, "release_date"]
+        ).astype(float)
+    )
 
     # Get the indices of the top N most similar songs
-    combined_similarity = (
-        0.4 * genre_similarity
-        + 0.2 * artist_similarity
-        + 0.2 * region_similarity
-        + 0.2 * (target_year == data["release_date"].values[:, None])
-    )
-    similar_indices = np.argsort(combined_similarity[target_song_index])[::-1][
-        1 : top_n + 1
-    ]
+    similar_indices = np.argsort(combined_similarity)[::-1][1 : top_n + 1]
 
     # Get the recommended songs
     recommendations = data.iloc[similar_indices]
@@ -86,13 +85,12 @@ def get_content_based_recommendations(song_id, top_n=10):
 
 
 def hybrid_recommendations(input_song_id, num_recommendations=5):
-
     # Get content-based recommendations
     recommendations = get_content_based_recommendations(
         input_song_id, top_n=num_recommendations
     )
 
-    # Sort the recommendations by content-based similarity (cosine similarity)
+    # Sort the recommendations by a relevant feature
     recommendations = recommendations.sort_values(
         by=["genre"], ascending=False
     )  # Adjust sorting criteria if needed
