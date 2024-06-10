@@ -37,6 +37,23 @@ def load_data_from_mongo():
     return df
 
 
+def date_similarity(dates, target_date):
+    # Convert dates to numerical values (e.g., days since the epoch)
+    days_since_epoch = (dates - pd.Timestamp("1970-01-01")) // pd.Timedelta("1D")
+    target_days_since_epoch = (
+        target_date - pd.Timestamp("1970-01-01")
+    ) // pd.Timedelta("1D")
+
+    # Calculate the absolute differences
+    date_diff = np.abs(days_since_epoch - target_days_since_epoch)
+
+    # Invert the differences to get similarity (higher difference means lower similarity)
+    max_diff = date_diff.max()
+    date_similarity = 1 - (date_diff / max_diff)
+
+    return date_similarity
+
+
 # Function to get content-based recommendations based on music features
 def get_content_based_recommendations(song_id, top_n=10):
     data = load_data_from_mongo()
@@ -63,16 +80,16 @@ def get_content_based_recommendations(song_id, top_n=10):
     genre_similarity = scaler.fit_transform(genre_similarity)
     artist_similarity = scaler.fit_transform(artist_similarity)
     region_similarity = scaler.fit_transform(region_similarity)
+    # Calculate date similarity
+    target_date = data.loc[target_song_index, "release_date"]
+    date_sim = date_similarity(data["release_date"], target_date)
 
     # Calculate the combined similarity
     combined_similarity = (
         0.5 * genre_similarity[target_song_index]
         + 0.2 * artist_similarity[target_song_index]
         + 0.2 * region_similarity[target_song_index]
-        + 0.1
-        * (
-            data["release_date"].values == data.loc[target_song_index, "release_date"]
-        ).astype(float)
+        + 0.1 * date_sim
     )
 
     # Get the indices of the top N most similar songs
